@@ -147,11 +147,12 @@ if __name__ == '__main__':
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     setup_bot(application)
 
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=8443,
-        url_path=TELEGRAM_TOKEN,
-        webhook_url=WEBHOOK
-    )
+    application.run_polling()
+    # application.run_webhook(
+    #     listen="0.0.0.0",
+    #     port=8443,
+    #     url_path=TELEGRAM_TOKEN,
+    #     webhook_url=WEBHOOK
+    # )
     # application.setWebhook(WEBHOOK + TELEGRAM_TOKEN)
 
