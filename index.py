@@ -87,7 +87,6 @@ def setup_bot(updater):
         entry_points=[CommandHandler('create', createQuiz.start)],
         states=create_states,
         fallbacks=[CommandHandler('cancelCreate', createQuiz.cancel)],
-        persistent=True,
         name='create_handler'
     )
     dispatch.add_handler(create_handler)
@@ -101,8 +100,6 @@ def setup_bot(updater):
         entry_points=[CommandHandler('attempt', attemptQuiz.start)],
         states=attempt_states,
         fallbacks=[CommandHandler('cancelattempt', attemptQuiz.cancel)],
-        allow_reentry=True,
-        persistent=True,
         name='attempt_handler'
     )
     dispatch.add_handler(attempt_handler)
@@ -118,7 +115,6 @@ def setup_bot(updater):
             'remove', editQuiz.start_remove)],
         states=edit_states,
         fallbacks=[CommandHandler('cancelEdit', editQuiz.cancel_edit)],
-        persistent=True,
         name='edit_handler'
     )
     dispatch.add_handler(edit_handler)
@@ -133,7 +129,6 @@ def setup_bot(updater):
         entry_points=[CommandHandler('import', importQuiz.start)],
         states=import_states,
         fallbacks=[CommandHandler('cancelImport', importQuiz.cancel)],
-        persistent=True,
         name='import_handler'
     )
     dispatch.add_handler(import_handler)
