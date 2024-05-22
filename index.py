@@ -149,7 +149,8 @@ if __name__ == '__main__':
 
     application.run_webhook(
         listen="0.0.0.0",
-        port=8443
+        port=8443,
+        url_path=TELEGRAM_TOKEN
     )
     # application.setWebhook(WEBHOOK + TELEGRAM_TOKEN)
 
