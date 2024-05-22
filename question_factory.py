@@ -156,7 +156,7 @@ class QuestionChoice(Question):
         assert correct_answer
         super().__init__(question, correct_answer)
         self.is_random = False
-        self.possible_answers = correct_answer.split(', ')
+        self.possible_answers = correct_answer.split('|')
 
     def add_possible_answer(self, new_answer):
         """
@@ -176,7 +176,7 @@ class QuestionChoice(Question):
         :raises AssertionError: If no solution was entered by the user yet.
         """
         super().check_solution()
-        return set(self.user_answer.split(", ")) == set(self.correct_answer.split(", "))
+        return set(self.user_answer.split("|")) == set(self.correct_answer.split("|"))
 
 
 class QuestionChoiceSingle(QuestionChoice):
@@ -196,7 +196,7 @@ class QuestionChoiceSingle(QuestionChoice):
         :raises AssertionError: If the question is empty
             or the count of correct answers doesn't equal one.
         """
-        assert len(correct_answer.split(", ")) == 1
+        assert len(correct_answer.split("|")) == 1
         super().__init__(question, correct_answer)
 
     def enter_solution(self, answer):
@@ -206,5 +206,5 @@ class QuestionChoiceSingle(QuestionChoice):
         :param answer: Answer by the user as a string.
         :raises AssertionError: If the entered string includes more than one answer.
         """
-        assert len(answer.split(", ")) == 1
+        assert len(answer.split("|")) == 1
         return super().enter_solution(answer)

@@ -6,11 +6,12 @@ import random
 import pickle
 import os
 import pymongo
+from telegram.constants import ChatAction
 from telegram.ext import ConversationHandler
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, ChatAction
-from quizbot.quiz.question_factory import QuestionBool, QuestionChoice, QuestionChoiceSingle, \
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
+from question_factory import QuestionBool, QuestionChoice, QuestionChoiceSingle, \
     QuestionNumber, QuestionString
-from quizbot.quiz.attempt import Attempt
+from attempt import Attempt
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
@@ -21,7 +22,7 @@ db = pymongo.MongoClient(os.environ.get('MONGODB')).quizzes
 userDict = dict()
 
 
-def start(update, _):
+async def start(update, _):
     """
     Starts a conversation about an attempt at a quiz.
     Welcomes the user and asks for a quiz.
@@ -32,21 +33,20 @@ def start(update, _):
         # user is in the middle of a quiz and can't attempt a second one
         logger.info('[%s] Attempt canceled because the user is in the middle of a quiz.',
                     update.message.from_user.username)
-        update.message.reply_text(
-            "You're in the middle of a quiz. You can't attempt a second one 😁\n"
-            'If you want to cancel your attempt, enter /cancelAttempt.'
+        await update.message.reply_text(
+            "Во время выполнения теста нельзя запускать следующий 😁\n"
+            'Если ты хочешь закончить - введи /cancelattempt.'
         )
         return ConversationHandler.END
 
-    update.message.reply_text(
-        'Hi 😃 On which quiz do you want to participate in?\n'
-        'Please enter the name of the quiz. '
-        'If the quiz wasn\'t created by you, please enter the username of the creator after that.'
+    await update.message.reply_text(
+        'Приветики-пистолетики 😃 Какой тест ты хочешь пройти?\n'
+        'Введи номер темы (1-12): '
     )
     return 'ENTER_QUIZ'
 
 
-def cancel(update, _):
+async def cancel(update, _):
     """
     Cancels an attempt to a quiz by deleting the users' entries.
     """
@@ -55,12 +55,12 @@ def cancel(update, _):
 
     # Remove all user data
     userDict.pop(update.message.from_user.id)
-    update.message.reply_text(
-        "I canceled you attempt. See you next time. 🙋‍♂️")
+    await update.message.reply_text(
+        "Твое тестирование отменено. Увидимся. 🙋‍♂️")
     return ConversationHandler.END
 
 
-def enter_quiz(update, context):
+async def enter_quiz(update, context):
     """
     Enters a quiz.
     Try to load a quiz from the input.
@@ -73,14 +73,14 @@ def enter_quiz(update, context):
 
     # name of the quiz is the first word, the creator the from_user by default
     quizname = update.message.text.split()[0]
-    quizcreator = update.message.from_user.username
+    quizcreator = "belogolovy"
 
     # If second word exists, it equals the creator
     if len(update.message.text.split()) > 1:
         quizcreator = update.message.text.split()[1]
 
     # Bot is typing during database query
-    context.bot.send_chat_action(
+    await context.bot.send_chat_action(
         chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
 
     # Quizzes created by the entered user
@@ -89,8 +89,8 @@ def enter_quiz(update, context):
     quiz_dict = user_col.find_one({'quizname': quizname})
     if quiz_dict is None:
         # couldnt find the quiz
-        update.message.reply_text(
-            "Sorry, I couldn't find the quiz '{}' 😕 Please try again.".format(
+        await update.message.reply_text(
+            "Прости, не смог найти тест '{}' 😕 Попробуй снова.".format(
                 quizname)
         )
         logger.info('[%s] Couldnt find Quiz %s',
@@ -102,17 +102,17 @@ def enter_quiz(update, context):
     # if a quiz was found, load it and creates an attempt
     loaded_quiz = pickle.loads(quiz_dict['quizinstance'])
     userDict[user_id] = Attempt(loaded_quiz)
-    update.message.reply_text(
-        "Lets go! 🙌 Have fun with the quiz '{}'!\n\
-            You can cancel your participation with /cancelAttempt.".format(quizname)
+    await update.message.reply_text(
+        "Вперед! 🙌 Насладись миром ревматологии с тестом '{}'!\nНо ты можешь отменить наслаждение командой /cancelattempt.".format(
+            quizname)
     )
 
     # Asks first question
-    ask_question(update)
+    await ask_question(update)
     return 'ENTER_ANSWER'
 
 
-def enter_answer(update, _):
+async def enter_answer(update, _):
     """
     It processes the answer to a question and asks a new question, if possible.
     Otherwise, it prints results.
@@ -150,8 +150,8 @@ def enter_answer(update, _):
         userDict[user_id].user_answers.clear()
         logger.info("[%s] Something went wrong by entering the answer.",
                     update.message.from_user.username)
-        update.message.reply_text(
-            "Sorry 😕 Something went wrong by entering your answer. Please try again.")
+        await update.message.reply_text(
+            "Прости 😕 Что-то пошло не так при получении твоего ответа. Попробуй снова.")
         return 'ENTER_ANSWER'
 
     logger.info('[%s] Entered Answer', update.message.from_user.username)
@@ -159,28 +159,28 @@ def enter_answer(update, _):
     if userDict[user_id].quiz.show_results_after_question:
         # If creator of the quiz wants the user to see him/her results after the question
         if is_correct:
-            update.message.reply_text("Thats correct 😁")
+            await update.message.reply_text("Это верно! 🔥")
         else:
-            update.message.reply_text(
-                "Sorry, thats not correct. 😕\nThe correct answer is: {}".format(correct_answer))
+            await update.message.reply_text(
+                "Неверно 😕\nПравильный ответ: {}".format(correct_answer))
 
     if userDict[user_id].has_next_question():
         # check for next question
-        ask_question(update)
+        await ask_question(update)
         return 'ENTER_ANSWER'
 
     # no question left
-    update.message.reply_text(
-        "Thanks for your participation! ☺️", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text(
+        "Спасибо за участие! ☺️", reply_markup=ReplyKeyboardRemove())
     if userDict[user_id].quiz.show_results_after_quiz:
         # If creator of the quiz wants the user to see him/her results after the quiz
         count = 1
         for is_correct, question in userDict[user_id].user_points:
-            update.message.reply_text(
-                "Question {}:\n".format(count)
+            await update.message.reply_text(
+                "Вопрос {}:\n".format(count)
                 + question.question + "\n"
-                "Your answer was " +
-                ("correct 😁" if is_correct else "wrong. 😕\nThe correct answer is: {}".format(
+                                      "Ответ" +
+                ("правильный 😁" if is_correct else "неправильный. 😕\nПравильный ответ: {}".format(
                     question.correct_answer)),
                 reply_markup=ReplyKeyboardRemove())
             count = count + 1
@@ -191,7 +191,7 @@ def enter_answer(update, _):
     return ConversationHandler.END
 
 
-def ask_question(update):
+async def ask_question(update):
     """
     Formats the keyboard and prints the current question.
     """
@@ -225,9 +225,10 @@ def ask_question(update):
             list_of_answers, one_time_keyboard=False)
 
     # print question
-    update.message.reply_text(
-        act_question.question,
-        reply_markup=reply_markup
+    await update.message.reply_text(
+        '*Вопрос:* ' + act_question.question,
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
     )
 
     logger.info('[%s] Printed new question', update.message.from_user.username)
