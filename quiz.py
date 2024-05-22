@@ -2,7 +2,7 @@
 With this module, you can create quizzes with questions different kinds.
 """
 
-from quizbot.quiz.question_factory import Question
+from question_factory import Question
 
 
 class Quiz:

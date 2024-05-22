@@ -2,7 +2,7 @@
 With this module you can create one attemp of a quiz.
 """
 import random
-from quizbot.quiz.quiz import Quiz
+from quiz import Quiz
 
 
 class Attempt:
