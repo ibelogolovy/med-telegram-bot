@@ -142,11 +142,14 @@ def setup_bot(updater):
 
 if __name__ == '__main__':
     TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
+    WEBHOOK = os.environ['WEBHOOK']
 
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     setup_bot(application)
 
     application.run_webhook(
-        listen='0.0.0.0',
+        listen=WEBHOOK,
         port=8443
     )
+    application.setWebhook(WEBHOOK + TELEGRAM_TOKEN)
+
