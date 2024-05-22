@@ -148,7 +148,7 @@ if __name__ == '__main__':
     setup_bot(application)
 
     application.run_webhook(
-        listen="https://"+WEBHOOK,
+        listen="0.0.0.0",
         port=8443
     )
     application.setWebhook(WEBHOOK + TELEGRAM_TOKEN)
