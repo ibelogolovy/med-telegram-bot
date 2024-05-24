@@ -67,6 +67,7 @@ def setup_bot(updater):
     # start command
     dispatch.add_handler(CommandHandler("start", print_help))
     dispatch.add_handler(CommandHandler("help", print_help))
+    dispatch.add_handler(CommandHandler("cancelattempt", attemptQuiz.cancel))
 
     # Conversation if the user wants to create a quiz
     create_states = {
@@ -103,6 +104,14 @@ def setup_bot(updater):
         name='attempt_handler'
     )
     dispatch.add_handler(attempt_handler)
+
+    continue_attempt_handler = ConversationHandler(
+        entry_points=[CommandHandler('continue', attemptQuiz.continue_quiz)],
+        states=attempt_states,
+        fallbacks=[CommandHandler('cancelattempt', attemptQuiz.cancel)],
+        name='continue_attempt_handler'
+    )
+    dispatch.add_handler(continue_attempt_handler)
 
     # Conversation about remove or renaming exisiting quiz
     edit_states = {
@@ -142,7 +151,7 @@ def setup_bot(updater):
 
 if __name__ == '__main__':
     TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
-    WEBHOOK = os.environ['WEBHOOK']
+    # WEBHOOK = os.environ['WEBHOOK']
 
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     setup_bot(application)

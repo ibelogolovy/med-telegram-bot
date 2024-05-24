@@ -18,8 +18,9 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 db = pymongo.MongoClient(os.environ.get('MONGODB')).quizzes
+
+
 # Dict to store user data like an attempt instance
-userDict = dict()
 
 
 async def start(update, _):
@@ -29,13 +30,15 @@ async def start(update, _):
     """
     logger.info('[%s] Attempt initialized', update.message.from_user.username)
 
-    if update.message.from_user.id in userDict:
+    session = db["sessions"].find_one({'user': update.message.from_user.id})
+
+    if session is not None and 'attempt' in session and session['attempt'] is not None:
         # user is in the middle of a quiz and can't attempt a second one
         logger.info('[%s] Attempt canceled because the user is in the middle of a quiz.',
                     update.message.from_user.username)
         await update.message.reply_text(
-            "Во время выполнения теста нельзя запускать следующий 😁\n"
-            'Если ты хочешь закончить - введи /cancelattempt.'
+            "Найден другой незавершенный тест! 😁\n"
+            'Если ты хочешь его закончить - введи /cancelattempt. Иначе /continue'
         )
         return ConversationHandler.END
 
@@ -54,7 +57,9 @@ async def cancel(update, _):
                 update.message.from_user.username)
 
     # Remove all user data
-    userDict.pop(update.message.from_user.id)
+    db["sessions"].update_one({'user': update.message.from_user.id}, {
+        "$set": {'current_quiz': '', 'attempt': None}})
+
     await update.message.reply_text(
         "Твое тестирование отменено. Увидимся. 🙋‍♂️")
     return ConversationHandler.END
@@ -97,18 +102,39 @@ async def enter_quiz(update, context):
                     update.message.from_user.username, quizname)
         return 'ENTER_QUIZ'
 
+    session_col = db["sessions"]
+    session = session_col.find_one({'user': update.message.from_user.id})
+    if session is None:
+        session_col.insert_one(
+            {'user': update.message.from_user.id, 'current_quiz': quizname}
+        )
+    else:
+        session_col.update_one({'user': update.message.from_user.id}, {
+            "$set": {"current_quiz": quizname}})
+
     logger.info('[%s] Found Quiz %s',
                 update.message.from_user.username, quizname)
     # if a quiz was found, load it and creates an attempt
     loaded_quiz = pickle.loads(quiz_dict['quizinstance'])
-    userDict[user_id] = Attempt(loaded_quiz)
+    attempt = Attempt(loaded_quiz)
+
+    session_col.update_one({'user': update.message.from_user.id}, {
+        "$set": {'attempt': pickle.dumps(attempt)}})
+
     await update.message.reply_text(
         "Вперед! 🙌 Насладись миром ревматологии с тестом '{}'!\nНо ты можешь отменить наслаждение командой /cancelattempt.".format(
             quizname)
     )
 
     # Asks first question
-    await ask_question(update)
+    await ask_question(update, attempt)
+    return 'ENTER_ANSWER'
+
+
+async def continue_quiz(update, _):
+    user_id = update.message.from_user.id
+    attempt = pickle.loads(db["sessions"].find_one({'user': user_id})['attempt'])
+    await ask_question(update, attempt)
     return 'ENTER_ANSWER'
 
 
@@ -120,7 +146,8 @@ async def enter_answer(update, _):
 
     user_id = update.message.from_user.id
     user_message = update.message.text
-    act_question = userDict[user_id].act_question()
+    attempt = pickle.loads(db["sessions"].find_one({'user': user_id})['attempt'])
+    act_question = attempt.act_question()
 
     # If the current question is a multiple-choice question,
     # the bot has to wait for "Enter" to enter the answer.
@@ -132,7 +159,7 @@ async def enter_answer(update, _):
 
         # add answer to list of users' answers
         # TODO What if user answer isnt in possible messages
-        userDict[user_id].input_answer(user_message)
+        attempt.input_answer(user_message)
         # wait for next answer
         return 'ENTER_ANSWER'
     elif not type(act_question) is QuestionChoice:
@@ -141,13 +168,13 @@ async def enter_answer(update, _):
                     update.message.from_user.username, user_message)
 
         # add answer to list of users' answers
-        userDict[user_id].input_answer(user_message)
+        attempt.input_answer(user_message)
 
     # enter the answer of user
     try:
-        is_correct, correct_answer = userDict[user_id].enter_answer()
+        is_correct, correct_answer = attempt.enter_answer()
     except AssertionError:
-        userDict[user_id].user_answers.clear()
+        attempt.user_answers.clear()
         logger.info("[%s] Something went wrong by entering the answer.",
                     update.message.from_user.username)
         await update.message.reply_text(
@@ -156,7 +183,7 @@ async def enter_answer(update, _):
 
     logger.info('[%s] Entered Answer', update.message.from_user.username)
 
-    if userDict[user_id].quiz.show_results_after_question:
+    if attempt.quiz.show_results_after_question:
         # If creator of the quiz wants the user to see him/her results after the question
         if is_correct:
             await update.message.reply_text("Это верно! 🔥")
@@ -164,18 +191,20 @@ async def enter_answer(update, _):
             await update.message.reply_text(
                 "Неверно 😕\nПравильный ответ: {}".format(correct_answer))
 
-    if userDict[user_id].has_next_question():
+    if attempt.has_next_question():
         # check for next question
-        await ask_question(update)
+        db["sessions"].update_one({'user': update.message.from_user.id}, {
+            "$set": {'attempt': pickle.dumps(attempt)}})
+        await ask_question(update, attempt)
         return 'ENTER_ANSWER'
 
     # no question left
     await update.message.reply_text(
         "Спасибо за участие! ☺️", reply_markup=ReplyKeyboardRemove())
-    if userDict[user_id].quiz.show_results_after_quiz:
+    if attempt.quiz.show_results_after_quiz:
         # If creator of the quiz wants the user to see him/her results after the quiz
         count = 1
-        for is_correct, question in userDict[user_id].user_points:
+        for is_correct, question in attempt.user_points:
             await update.message.reply_text(
                 "Вопрос {}:\n".format(count)
                 + question.question + "\n"
@@ -186,17 +215,18 @@ async def enter_answer(update, _):
             count = count + 1
 
     # Deletes the users entries to closes the attempt
-    del userDict[update.message.from_user.id]
+    db["sessions"].update_one({'user': update.message.from_user.id}, {
+        "$set": {'current_quiz': '', 'current_question': 0, 'attempt': None}})
+
     logger.info('[%s] Quitting Quiz', update.message.from_user.username)
     return ConversationHandler.END
 
 
-async def ask_question(update):
+async def ask_question(update, attempt):
     """
     Formats the keyboard and prints the current question.
     """
-    user_id = update.message.from_user.id
-    act_question = userDict[user_id].act_question()
+    act_question = attempt.act_question()
 
     if isinstance(act_question, (QuestionString, QuestionNumber)):
         # String or number question: Use normal Keyboard
